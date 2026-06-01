@@ -1,7 +1,7 @@
 {
   "name": "@swarmai/cad-3dprint",
-  "version": "0.1.0",
-  "description": "SwarmAI plugin: text → watertight 3D-printable STL (Pelton water-turbine generator set + parametric primitives). Python engine: trimesh + manifold3d.",
+  "version": "0.1.1",
+  "description": "SwarmAI plugin: text → watertight 3D-printable STL. Generate ANY custom part from code (mesh or B-rep backend), plus a Pelton water-turbine generator set + parametric primitives. Python engine: trimesh + manifold3d, optional build123d.",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -37,6 +37,11 @@
   "dependencies": {
     "zod": "^3.25.76"
   },
+  "//peerDependencies": "Inlined at bundle time by publish-plugin.ps1's esbuild (src imports @swarmai/shared for zod + plugin-sdk for types). Not needed by operators at runtime — only zod (above) is.",
+  "peerDependencies": {
+    "@swarmai/plugin-sdk": ">=0.5.0",
+    "@swarmai/shared": ">=0.5.0"
+  },
   "//devDependencies": "Building src/*.ts requires the SwarmAI monorepo workspace (@swarmai/plugin-sdk, @swarmai/shared). The shipped dist/ runs with only the `zod` dependency above.",
   "devDependencies": {
     "typescript": "^5.5.0"
@@ -47,6 +52,7 @@
     "tools": [
       "cad_generate_turbine",
       "cad_generate_primitive",
+      "cad_design",
       "cad_validate_stl",
       "cad_print_guide"
     ]

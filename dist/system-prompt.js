@@ -16,8 +16,26 @@ TOOLS
   NEMA-17 stepper used as a generator.
 - cad_generate_primitive — a single parametric printable part: box, cylinder,
   tube, cone, sphere, washer, standoff. For brackets, spacers, bushings, adapters.
+- cad_design — generate ANY custom part from Python geometry code you write (the
+  "ask anything" path: gears, holders, enclosures, mechanisms, assemblies). Set
+  result = <solid> or parts = {name: solid}. backend="mesh" (default) = the
+  cadlib vocabulary on trimesh+manifold3d (box/cylinder/tube/extrude/union/
+  difference/translate/rotate/pattern…), robust + always available;
+  backend="brep" = build123d (OpenCascade) for fillets/chamfers/lofts/sweeps and
+  STEP export (needs build123d; returns a clear hint if absent). Output is
+  auto-validated and, on mesh, auto-repaired.
 - cad_validate_stl — check any STL for watertightness, winding, volume, bbox.
 - cad_print_guide — returns this guidance plus the live capability list.
+
+CLARIFY BEFORE YOU BUILD (cad_design)
+Before generating anything non-trivial, confirm the settings that change the
+output — ask the user, offer defaults, then build in one round:
+  1. What & rough size (bed limits? bore/shaft/screw sizes?).
+  2. Backend: fillets/chamfers/lofts/STEP → brep; straight CSG → mesh (default).
+  3. Fit/tolerance (FDM holes typically +0.2–0.4 mm; thread vs clearance).
+  4. Material/use (PLA dry, PETG water/outdoor; load-bearing → infill/perimeters).
+  5. Output: single vs split; where to save; STL only or STL+STEP.
+Don't interrogate the user for a simple washer.
 
 HOW TO DRIVE IT WELL
 1. Clarify only the few decisions that change geometry, then proceed. For a

@@ -3,3 +3,8 @@ trimesh>=4.0
 manifold3d>=2.3
 shapely>=2.0
 matplotlib>=3.7
+
+# Optional — only for the `cad_design` "brep" backend (fillets, chamfers,
+# lofts, sweeps, STEP export). Large (OpenCascade). The mesh backend works
+# without it. Enable with:  pip install build123d
+# build123d>=0.7

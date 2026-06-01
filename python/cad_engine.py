@@ -310,6 +310,142 @@ def build_primitive(params: Dict[str, Any]) -> Dict[str, Any]:
     return {"kind": "primitive", "out_dir": out_dir, "parts": [info], "preview": None}
 
 
+# ═══════════════════════ GENERAL DESIGN (ask-anything) ══════════════
+# Two backends the model can pick per request:
+#   * "mesh"  — trimesh + manifold3d CSG via the `cadlib` vocabulary.
+#               Always available; robust, watertight-first.
+#   * "brep"  — build123d (OpenCascade B-rep): fillets, chamfers, lofts,
+#               sweeps, sketches, STEP export. Requires `pip install
+#               build123d`; degrades to a clear error when absent.
+# Generated code sets `result = <solid>` (single part) or
+# `parts = {"name": <solid>, ...}` (assembly). Each solid is validated and,
+# on the mesh backend, repaired (manifold re-union + hole fill) before export.
+
+_SAFE_BUILTINS = {
+    k: __builtins__[k] if isinstance(__builtins__, dict) else getattr(__builtins__, k)
+    for k in (
+        "range", "len", "abs", "min", "max", "round", "enumerate", "zip",
+        "list", "dict", "tuple", "set", "float", "int", "str", "bool",
+        "sum", "sorted", "map", "filter", "pow", "divmod", "print",
+        "reversed", "isinstance", "ValueError", "Exception",
+    )
+}
+
+
+def _collect_outputs(ns: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull {name: solid} out of the executed namespace. Accepts a `parts`
+    dict (assembly) or a single `result`. Raises with a helpful message
+    when neither is set (the #1 weak-model mistake)."""
+    if isinstance(ns.get("parts"), dict) and ns["parts"]:
+        return dict(ns["parts"])
+    if ns.get("result") is not None:
+        return {"part": ns["result"]}
+    raise ValueError(
+        "code produced no geometry: set `result = <solid>` for a single part, "
+        "or `parts = {\"name\": <solid>, ...}` for an assembly."
+    )
+
+
+def _repair_mesh(mesh: "trimesh.Trimesh") -> "trimesh.Trimesh":
+    """Best-effort heal of a non-watertight mesh: a single-operand manifold
+    union re-meshes most CSG seams, then fill remaining holes."""
+    if mesh.is_watertight:
+        return mesh
+    try:
+        healed = trimesh.boolean.union([mesh], engine=ENGINE)
+        if healed is not None and healed.is_watertight:
+            return healed
+        if healed is not None:
+            mesh = healed
+    except Exception:
+        pass
+    mesh.remove_unreferenced_vertices()
+    mesh.merge_vertices()
+    mesh.fill_holes()
+    return mesh
+
+
+def _design_mesh(code: str, out_dir: str, name: str, preview: bool) -> Dict[str, Any]:
+    import cadlib
+    ns: Dict[str, Any] = {"__builtins__": _SAFE_BUILTINS, "np": np, "math": math, "cadlib": cadlib}
+    for fn in cadlib.__all__:
+        ns[fn] = getattr(cadlib, fn)
+    exec(compile(code, "<cad_design>", "exec"), ns)
+    outputs = _collect_outputs(ns)
+    reports: List[Dict[str, Any]] = []
+    for part_name, mesh in outputs.items():
+        if not isinstance(mesh, trimesh.Trimesh):
+            raise ValueError(
+                f"'{part_name}' is {type(mesh).__name__}, not a solid. On the mesh "
+                f"backend every part must be a cadlib/trimesh solid."
+            )
+        mesh = _repair_mesh(mesh)
+        safe = part_name if part_name == name or len(outputs) > 1 else name
+        reports.append(_export(mesh, out_dir, safe))
+    preview_path = _render_preview(out_dir, reports) if preview else None
+    return {"kind": "design", "backend": "mesh", "out_dir": out_dir,
+            "parts": reports, "preview": preview_path}
+
+
+def _design_brep(code: str, out_dir: str, name: str, preview: bool, export_step: bool) -> Dict[str, Any]:
+    try:
+        import build123d as _b3d  # noqa: F401
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": "brep backend requires build123d (OpenCascade). "
+                     "Install with:  pip install build123d",
+            "missing_deps": ["build123d"],
+            "detail": str(e),
+        }
+    from build123d import export_stl  # type: ignore
+    try:
+        from build123d import export_step  # type: ignore
+    except Exception:
+        export_step = None  # older build123d
+    ns: Dict[str, Any] = {"math": math}
+    exec("from build123d import *", ns)        # full build123d vocabulary
+    exec(compile(code, "<cad_design>", "exec"), ns)
+    outputs = _collect_outputs(ns)
+    reports: List[Dict[str, Any]] = []
+    for part_name, shape in outputs.items():
+        # build123d BuildPart context → its .part; algebra API → the shape.
+        solid = getattr(shape, "part", shape)
+        safe = part_name if (part_name == name or len(outputs) > 1) else name
+        stl_path = os.path.join(out_dir, safe + ".stl")
+        export_stl(solid, stl_path)
+        if export_step:
+            try:
+                export_step(solid, os.path.join(out_dir, safe + ".step"))
+            except Exception:
+                pass
+        m = trimesh.load(stl_path, force="mesh")
+        info = _validate(m)
+        info["name"] = safe
+        info["path"] = stl_path
+        info["bytes"] = os.path.getsize(stl_path)
+        reports.append(info)
+    preview_path = _render_preview(out_dir, reports) if preview else None
+    return {"kind": "design", "backend": "brep", "out_dir": out_dir,
+            "parts": reports, "preview": preview_path}
+
+
+def build_design(params: Dict[str, Any]) -> Dict[str, Any]:
+    code = params.get("code")
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("`code` (Python geometry source) is required.")
+    out_dir = params["out_dir"]
+    os.makedirs(out_dir, exist_ok=True)
+    name = params.get("name") or "part"
+    preview = params.get("preview", True)
+    backend = (params.get("backend") or "mesh").lower()
+    if backend in ("mesh", "trimesh", "a"):
+        return _design_mesh(code, out_dir, name, preview)
+    if backend in ("brep", "build123d", "b"):
+        return _design_brep(code, out_dir, name, preview, bool(params.get("export_step", False)))
+    raise ValueError(f"unknown backend '{backend}'. Use 'mesh' or 'brep'.")
+
+
 # ═══════════════════════ VALIDATE / PREVIEW ═════════════════════════
 def validate_stl(path: str) -> Dict[str, Any]:
     mesh = trimesh.load(path, force="mesh")

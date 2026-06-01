@@ -2,7 +2,7 @@
 # `id` must match package.json#name; `entry` points at the loaded ESM module.
 id: "@swarmai/cad-3dprint"
 entry: dist/index.js
-version: 0.1.0
+version: 0.1.1
 kind: tool
 displayName: CAD / 3D-Print Tools
 description: >-
@@ -17,6 +17,8 @@ tools:
     summary: Complete Pelton water-turbine generator set (6 STL parts).
   - name: cad_generate_primitive
     summary: Single parametric printable part (box/cylinder/tube/cone/sphere/washer/standoff).
+  - name: cad_design
+    summary: Generate ANY custom part from Python geometry code (mesh=trimesh/manifold3d or brep=build123d).
   - name: cad_validate_stl
     summary: Watertight / volume / bbox / printable verdict for any STL.
   - name: cad_print_guide

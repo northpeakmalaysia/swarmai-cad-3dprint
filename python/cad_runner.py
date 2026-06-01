@@ -10,6 +10,8 @@ Protocol (process-isolated, stdin/stdout):
 Actions:
   - "turbine"   : build_turbine(params)
   - "primitive" : build_primitive(params)
+  - "design"    : build_design(params) — general "ask anything" code → solid
+                  (backend: "mesh" = cadlib/trimesh, "brep" = build123d)
   - "validate"  : validate_stl(params["path"])
   - "selftest"  : import-only dependency check
 
@@ -73,6 +75,13 @@ def main() -> int:
             result = ce.build_turbine(params)
         elif action == "primitive":
             result = ce.build_primitive(params)
+        elif action == "design":
+            result = ce.build_design(params)
+            # build_design returns an {ok:False,...} envelope for the
+            # brep-backend-missing case — pass it through unwrapped.
+            if isinstance(result, dict) and result.get("ok") is False:
+                print(json.dumps(result))
+                return 2
         elif action == "validate":
             result = ce.validate_stl(params["path"])
         else:

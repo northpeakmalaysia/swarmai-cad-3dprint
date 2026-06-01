@@ -209,6 +209,88 @@ const pluginEntry: PluginEntry = (api: PluginAPI, config?: CadPluginConfig) => {
     },
   };
 
+  const designTool: ToolDef = {
+    name: 'cad_design',
+    toolset: TOOLSET,
+    emoji: '✨',
+    policy: 'pair-gated',
+    description:
+      'Generate ANY custom 3D-printable part from Python geometry code you ' +
+      'write — not limited to the turbine/primitive templates. Set ' +
+      '`result = <solid>` (single part) or `parts = {"name": <solid>, ...}` ' +
+      '(assembly). Two backends: backend="mesh" (default) gives the cadlib ' +
+      'vocabulary (box, cylinder, tube, cone, sphere, prism, extrude, ' +
+      'rounded_polygon, revolve, hull, loft, union/difference/intersect, ' +
+      'translate/rotate/scale/mirror, linear_pattern/radial_pattern) on ' +
+      'trimesh+manifold3d — robust, always available. backend="brep" gives ' +
+      'the full build123d (OpenCascade) vocabulary for fillets, chamfers, ' +
+      'lofts, sweeps, sketches and STEP export (requires build123d). Output ' +
+      'is auto-validated (watertight) and, on the mesh backend, auto-repaired. ' +
+      'Call cad_print_guide first for the API reference and the ' +
+      'clarify-before-you-build checklist.',
+    schema: z.object({
+      code: z.string(),
+      name: z.string().optional(),
+      backend: z.enum(['mesh', 'brep']).default('mesh'),
+      outputDir: z.string().optional(),
+      preview: z.boolean().default(true),
+      export_step: z.boolean().default(false),
+    }),
+    schemaOverride: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description:
+            'Python geometry source. Set `result = <solid>` or `parts = {name: solid}`. ' +
+            'mesh backend: cadlib names are pre-imported (no import needed). ' +
+            'brep backend: the build123d vocabulary is pre-imported.',
+        },
+        name: { type: 'string', description: 'Output STL name (no extension). Default "part".' },
+        backend: {
+          type: 'string',
+          enum: ['mesh', 'brep'],
+          description: 'mesh = trimesh+manifold3d (default, robust CSG). brep = build123d (fillets/lofts/STEP).',
+        },
+        outputDir: { type: 'string', description: 'Folder to write the STL(s) into.' },
+        preview: { type: 'boolean', description: 'Render preview.png. Default true.' },
+        export_step: { type: 'boolean', description: 'brep only — also write a .step file. Default false.' },
+      },
+      required: ['code'],
+      additionalProperties: false,
+    },
+    handler: async (input: {
+      code: string;
+      name?: string;
+      backend?: string;
+      outputDir?: string;
+      preview?: boolean;
+      export_step?: boolean;
+    }) => {
+      const out = resolve(input.outputDir || join(defaultOut, 'design'));
+      const res = await runPython(python, {
+        action: 'design',
+        params: {
+          code: input.code,
+          name: input.name,
+          backend: input.backend || 'mesh',
+          out_dir: out,
+          preview: input.preview !== false,
+          export_step: input.export_step === true,
+        },
+      });
+      if (!res.ok) return res;
+      return {
+        ok: true,
+        backend: res.result!.backend,
+        outputDir: res.result!.out_dir,
+        parts: res.result!.parts,
+        preview: res.result!.preview,
+        summary: summarise(res.result),
+      };
+    },
+  };
+
   const validateTool: ToolDef = {
     name: 'cad_validate_stl',
     toolset: TOOLSET,
@@ -246,16 +328,28 @@ const pluginEntry: PluginEntry = (api: PluginAPI, config?: CadPluginConfig) => {
       systemPrompt: CAD_SYSTEM_PROMPT,
       capabilities: {
         toolset: TOOLSET,
-        tools: ['cad_generate_turbine', 'cad_generate_primitive', 'cad_validate_stl', 'cad_print_guide'],
+        tools: [
+          'cad_generate_turbine',
+          'cad_generate_primitive',
+          'cad_design',
+          'cad_validate_stl',
+          'cad_print_guide',
+        ],
         primitives: [...SHAPES],
         turbineParts: [...TURBINE_PARTS],
-        engine: 'python: trimesh + manifold3d (watertight CSG)',
+        design: {
+          backends: ['mesh', 'brep'],
+          mesh: 'trimesh + manifold3d via cadlib vocabulary (default, always available)',
+          brep: 'build123d / OpenCascade — fillets, chamfers, lofts, sweeps, STEP (needs build123d)',
+        },
+        engine: 'python: trimesh + manifold3d (watertight CSG); optional build123d (B-rep)',
       },
     }),
   };
 
   api.registerTool(turbineTool);
   api.registerTool(primitiveTool);
+  api.registerTool(designTool);
   api.registerTool(validateTool);
   api.registerTool(guideTool);
 };
