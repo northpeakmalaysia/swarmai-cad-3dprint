@@ -1,0 +1,43 @@
+# SwarmAI plugin manifest — consumed by @swarmai/plugin-loader discovery.
+# `id` must match package.json#name; `entry` points at the loaded ESM module.
+id: "@swarmai/cad-3dprint"
+entry: dist/index.js
+version: 0.1.0
+kind: tool
+displayName: CAD / 3D-Print Tools
+description: >-
+  Turns text requests into watertight, slicer-ready STL files. Ships a complete
+  parametric Pelton water-turbine generator set plus parametric primitives.
+  Geometry engine: Python trimesh + manifold3d (guaranteed-manifold CSG).
+trustTier: community
+
+toolset: cad-3dprint
+tools:
+  - name: cad_generate_turbine
+    summary: Complete Pelton water-turbine generator set (6 STL parts).
+  - name: cad_generate_primitive
+    summary: Single parametric printable part (box/cylinder/tube/cone/sphere/washer/standoff).
+  - name: cad_validate_stl
+    summary: Watertight / volume / bbox / printable verdict for any STL.
+  - name: cad_print_guide
+    summary: Returns the toolset system prompt + live capability list.
+
+# Optional per-plugin config (passed as the 2nd arg to the entry function):
+#   pythonPath: C:\Python313\python.exe   # override the python binary
+#   outputDir:  F:\SwarmAI\CAD\output     # default STL output folder
+config:
+  pythonPath: python
+  outputDir: ""
+
+requirements:
+  python: ">=3.10"
+  pip:
+    - numpy
+    - trimesh
+    - manifold3d
+    - shapely
+    - matplotlib
+
+# This prompt is surfaced to the agent (also returned by cad_print_guide and
+# exported as CAD_SYSTEM_PROMPT from dist/system-prompt.js for persona injection).
+systemPromptFile: SYSTEM_PROMPT.md

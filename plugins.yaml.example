@@ -1,0 +1,22 @@
+# Example SwarmAI plugin manifest entry for cad-3dprint.
+#
+# Merge the `plugins:` item below into your real manifest, which lives at:
+#   • Windows: %APPDATA%\swarmai\plugins.yaml
+#   • POSIX:   ~/.swarmai/plugins.yaml
+#
+# The loader accepts a Windows absolute path in `module` (see
+# @swarmai/plugin-loader manifest.ts "Shape 2"), so you can point straight at
+# the prebuilt runtime without copying the folder anywhere.
+
+version: 1
+plugins:
+  - module: "F:\\SwarmAI\\CAD\\SwamAI_Plugin_Tools\\dist\\index.js"
+    enabled: true
+    config:
+      pythonPath: python          # or an absolute path to python.exe
+      outputDir: "F:\\SwarmAI\\CAD\\output"
+
+# Alternatively, drop (or symlink) this whole folder under a discovery root
+# and reference it by id instead of path:
+#   set SWARMAI_PLUGINS_DIR=F:\SwarmAI\CAD          (parent of this folder)
+#   - module: "@swarmai/cad-3dprint"

@@ -1,0 +1,10 @@
+node_modules/
+*.env
+.npmrc
+Backup/
+*.log
+.DS_Store
+dist/*.tsbuildinfo
+output/
+python/__pycache__/
+*.tgz
